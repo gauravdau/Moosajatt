@@ -1,0 +1,168 @@
+<!doctype html>
+
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bus Seat Booking</title>
+  <style>
+    :root{--bg:#f3f4f6;--card:#fff;--accent:#0ea5a4;--muted:#6b7280;--booked:#ef4444}
+    body{font-family:Inter,system-ui,Arial;background:var(--bg);padding:24px;color:#0f172a}
+    .container{max-width:900px;margin:0 auto}
+    .card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 6px 20px rgba(15,23,42,0.06)}
+    h1{margin:0 0 10px;font-size:20px}
+    .layout{display:grid;grid-template-columns:1fr 320px;gap:16px;margin-top:12px}
+    /* Seat map */
+    .bus{background:linear-gradient(180deg,#eef2f7,#fff);padding:18px;border-radius:10px}
+    .rows{display:flex;flex-direction:column;gap:8px}
+    .row{display:flex;gap:10px;align-items:center}
+    .seat{width:44px;height:44px;border-radius:6px;background:#e6eef0;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;border:1px solid rgba(15,23,42,0.06)}
+    .seat.small{width:36px;height:36px;font-size:13px}
+    .seat.selected{background:var(--accent);color:white}
+    .seat.booked{background:var(--booked);color:white;cursor:not-allowed;opacity:0.95}
+    .aisle{width:22px}
+    .legend{display:flex;gap:12px;margin-top:12px}
+    .legend .item{display:flex;gap:8px;align-items:center}
+    .summary{padding:12px}
+    label{display:block;margin-top:10px;font-size:13px;color:var(--muted)}
+    input[type=text],input[type=tel]{width:100%;padding:8px;margin-top:6px;border-radius:6px;border:1px solid #e6eef0}
+    button{background:var(--accent);color:white;border:0;padding:10px 12px;border-radius:8px;cursor:pointer;margin-top:12px}
+    button.secondary{background:#111827}
+    @media(max-width:880px){.layout{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Bus Seat Booking — Demo</h1>
+      <p style="margin:6px 0;color:var(--muted)">Seat select karo, passenger details bharo aur <strong>Book</strong> dabao. Data localStorage me save ho jayega.</p>
+      <div class="layout">
+        <div>
+          <div class="bus card" id="bus">
+            <div style="text-align:center;margin-bottom:10px;color:var(--muted)">Driver — Front</div>
+            <div class="rows" id="rows"></div>
+            <div class="legend">
+              <div class="item"><div class="seat small"></div><div style="font-size:13px;color:var(--muted)">Available</div></div>
+              <div class="item"><div class="seat small selected"></div><div style="font-size:13px;color:var(--muted)">Selected</div></div>
+              <div class="item"><div class="seat small booked"></div><div style="font-size:13px;color:var(--muted)">Booked</div></div>
+            </div>
+          </div>
+        </div><div class="card summary">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Summary</strong>
+        <small style="color:var(--muted)">Price/seat: ₹200</small>
+      </div>
+      <p id="selCount">Selected seats: 0</p>
+      <p id="selList" style="color:var(--muted);margin-top:-8px">Seats: —</p>
+      <p style="font-weight:600;margin-top:8px">Total: ₹<span id="total">0</span></p>
+
+      <label for="name">Passenger Name</label>
+      <input type="text" id="name" placeholder="Full name">
+
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" placeholder="10 digit number">
+
+      <button id="bookBtn">Book Selected Seats</button>
+      <button class="secondary" id="clearBtn">Clear Bookings</button>
+
+      <hr style="margin:12px 0;border:none;border-top:1px dashed #e6eef0">
+      <div style="color:var(--muted);font-size:13px">Tip: On mobile, rotate screen for better view.</div>
+    </div>
+  </div>
+</div>
+
+  </div>  <script>
+    // Configuration
+    const price = 200;
+    // Seat layout template: each row is an array where 'x' = seat, '_' = aisle/space
+    // Example layout for a 2+2 bus over 10 rows
+    const layout = [
+      ['1','2','_','3','4'],
+      ['5','6','_','7','8'],
+      ['9','10','_','11','12'],
+      ['13','14','_','15','16'],
+      ['17','18','_','19','20'],
+      ['21','22','_','23','24'],
+      ['25','26','_','27','28'],
+      ['29','30','_','31','32'],
+      ['33','34','_','35','36'],
+      ['37','38','_','39','40']
+    ];
+
+    // State
+    let booked = {}; // { '1': {name, phone, ts}, ... }
+    let selected = new Set();
+
+    // Load persisted bookings
+    function load() {
+      const raw = localStorage.getItem('bus_booked_v1');
+      if(raw){
+        try{ booked = JSON.parse(raw); }catch(e){ booked = {}; }
+      }
+    }
+    function save(){ localStorage.setItem('bus_booked_v1', JSON.stringify(booked)); }
+
+    // Render
+    const rowsEl = document.getElementById('rows');
+    function render(){
+      rowsEl.innerHTML = '';
+      layout.forEach((r,ri)=>{
+        const rowEl = document.createElement('div'); rowEl.className='row';
+        r.forEach(cell=>{
+          if(cell === '_'){
+            const aisle = document.createElement('div'); aisle.className='aisle'; rowEl.appendChild(aisle); return;
+          }
+          const s = document.createElement('div'); s.className='seat'; s.textContent = cell; s.dataset.seat = cell;
+          if(booked[cell]){ s.classList.add('booked'); s.title = `Booked by ${booked[cell].name || '—'}`; }
+          else if(selected.has(cell)) s.classList.add('selected');
+          s.addEventListener('click', ()=>onSeatClick(cell));
+          rowEl.appendChild(s);
+        });
+        rowsEl.appendChild(rowEl);
+      });
+      updateSummary();
+    }
+
+    function onSeatClick(seat){
+      if(booked[seat]) return; // cannot toggle booked seat
+      if(selected.has(seat)) selected.delete(seat);
+      else selected.add(seat);
+      render();
+    }
+
+    function updateSummary(){
+      const count = selected.size;
+      document.getElementById('selCount').textContent = `Selected seats: ${count}`;
+      document.getElementById('selList').textContent = `Seats: ${count?Array.from(selected).join(', '):'—'}`;
+      document.getElementById('total').textContent = (count*price).toString();
+    }
+
+    document.getElementById('bookBtn').addEventListener('click', ()=>{
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      if(selected.size===0){ alert('Koi seat select nahi kiya.'); return; }
+      if(!name){ alert('Passenger name daalo.'); return; }
+      if(!/^\d{10}$/.test(phone)){ if(!confirm('Phone invalid lag raha hai. Phir bhi continue karein?')) return; }
+
+      // Mark each selected seat as booked
+      const now = Date.now();
+      selected.forEach(s=>{ booked[s] = {name,phone,ts:now}; });
+      save();
+      selected.clear();
+      render();
+      alert('Booking successful!');
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      if(!confirm('Saare bookings clear kar diye jayenge. Continue?')) return;
+      booked = {};
+      save();
+      selected.clear();
+      render();
+    });
+
+    // Init
+    load();
+    render();
+  </script></body>
+</html>
